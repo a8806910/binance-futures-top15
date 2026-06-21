@@ -1,6 +1,9 @@
 name: 币安合约涨幅前15
 
 on:
+  push:
+    branches:
+      - main
   schedule:
     # GitHub cron uses UTC. Run hourly at minute 17 to avoid top-of-hour congestion.
     - cron: "17 * * * *"
