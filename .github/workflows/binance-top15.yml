@@ -1,0 +1,69 @@
+name: 币安合约涨幅前15
+
+on:
+  schedule:
+    # GitHub cron uses UTC. Run hourly at minute 17 to avoid top-of-hour congestion.
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: binance-top15
+  cancel-in-progress: false
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Fetch Binance USD-M Futures data
+        run: python scripts/binance_top15.py --output report.md
+
+      - name: Append report to the automation issue
+        uses: actions/github-script@v7
+        env:
+          REPORT_PATH: report.md
+          ISSUE_TITLE: "币安合约涨幅前15｜自动汇总"
+        with:
+          script: |
+            const fs = require("fs");
+            const report = fs.readFileSync(process.env.REPORT_PATH, "utf8");
+            const { owner, repo } = context.repo;
+
+            const issues = await github.paginate(github.rest.issues.listForRepo, {
+              owner,
+              repo,
+              state: "open",
+              per_page: 100,
+            });
+            let issue = issues.find(
+              item => !item.pull_request && item.title === process.env.ISSUE_TITLE
+            );
+
+            if (!issue) {
+              const created = await github.rest.issues.create({
+                owner,
+                repo,
+                title: process.env.ISSUE_TITLE,
+                body: "此 Issue 由 GitHub Actions 自动维护。每次运行都会追加一条币安 U 本位永续合约 24 小时涨幅报告。",
+              });
+              issue = created.data;
+            }
+
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: issue.number,
+              body: report,
+            });
